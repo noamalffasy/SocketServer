@@ -5,6 +5,8 @@ HTTP Server Shell
 import socket
 import asyncio
 
+from threading import Thread
+
 from src.utils.http import generate_response, validate_http_request
 from src.utils.files import get_file_data, compress_data
 
@@ -19,6 +21,8 @@ class Server:
     ip_to_accept = "0.0.0.0"
     port = 80
     serve_dir = "./webroot"
+
+    routes = {"/": "index.html"}
 
     def __init__(self, serve_dir, port=80, ip_to_accept="0.0.0.0"):
         """Creates a server object
@@ -47,8 +51,34 @@ class Server:
 
         print("Listening for connections on port %d" % self.port)
 
-        self.loop = asyncio.get_event_loop()
-        self.loop.run_until_complete(self.handle_server())
+        def server_loop(loop):
+            asyncio.set_event_loop(loop)
+            self.loop.run_until_complete(self.handle_server())
+
+        bg_thread = Thread(target=server_loop,
+                           args=(asyncio.get_event_loop(),))
+        bg_thread.start()
+
+    def add_route(self, route, filename):
+        """Adds a custom route to the server
+
+        :param route: The new route (e.g. '/hi')
+        :type route: str
+        :param filename: The filename to go to (e.g. '/hi.html')
+        :type filename: str
+        """
+
+        self.routes[route] = filename
+
+    def remove_route(self, route):
+        """Removes a custom route from the server
+
+        :param route: The route to remove (e.g. '/hi')
+        :type route: str
+        """
+
+        if route in self.routes:
+            del self.routes[route]
 
     async def handle_client_request(self, resource, client_socket):
         """Check the required resource, generate proper HTTP response and send to client
@@ -59,8 +89,11 @@ class Server:
         :type client_socket: socket
         """
 
-        filename = self.serve_dir + \
-            "/index.html" if resource == "/" else self.serve_dir + resource
+        filename = self.serve_dir + resource
+
+        if resource in self.routes:
+            filename = f"{self.serve_dir}/{self.routes[resource]}"
+
         data = get_file_data(filename)
         gzip_data = compress_data(data)
 
@@ -89,6 +122,7 @@ class Server:
         print("Closing connection")
         client_socket.close()
 
+    @asyncio.coroutine
     async def handle_server(self):
         """Handles the server socket
         """
