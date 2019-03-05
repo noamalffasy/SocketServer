@@ -3,6 +3,7 @@ HTTP Server Shell
 """
 
 import socket
+import asyncio
 import zlib
 
 import mmap
@@ -13,7 +14,6 @@ from time import mktime
 
 IP = "0.0.0.0"
 PORT = 80
-SOCKET_TIMEOUT = 1000
 DEFAULT_URL = "./webroot"
 REDIRECTION_DICTIONARY = ""
 
@@ -107,9 +107,11 @@ def generate_response(filename, data_len):
     return "\r\n".join(headers).encode()
 
 
-def handle_client_request(resource, client_socket):
+async def handle_client_request(loop, resource, client_socket):
     """Check the required resource, generate proper HTTP response and send to client
 
+    :param loop: The event loop
+    :type loop: asyncio.BaseEventLoop
     :param resource: The path to the requested resource
     :type resource: str
     :param client_socket: The client socket
@@ -128,7 +130,8 @@ def handle_client_request(resource, client_socket):
 
     http_response = generate_response(filename, len(gzip_data))
     http_response += gzip_data
-    client_socket.send(http_response)
+
+    await loop.sock_sendall(client_socket, http_response)
 
 
 def validate_http_request(request):
@@ -160,50 +163,58 @@ def validate_http_request(request):
     return False, None
 
 
-def handle_client(client_socket):
+async def handle_client(loop, client_socket):
     """Handles client requests: verifies client"s requests are legal HTTP,
     calls function to handle the requests
 
-    :param client_socket: The client socket
-    :type client_socket: socket.socket
+    :param loop: The cyrrent loop
+    :type loop: asyncio.BaseEventLoop
+    :param server_socket: The client socket
+    :type server_socket: socket
     """
+
     print("Client connected")
     while True:
-        client_request = client_socket.recv(1024)
+        client_request = await loop.sock_recv(client_socket, 1024)
         valid_http, resource = validate_http_request(client_request)
+
         if valid_http:
-            print("Got a valid HTTP request")
-            handle_client_request(resource, client_socket)
+            await handle_client_request(loop, resource, client_socket)
         else:
-            print("Error: Not a valid HTTP request")
             break
     print("Closing connection")
     client_socket.close()
 
 
-def handle_server(server_socket):
+async def handle_server(loop, server_socket):
     """Handles the server socket
 
+    :param loop: The cyrrent loop
+    :type loop: asyncio.BaseEventLoop
     :param server_socket: The server socket
     :type server_socket: socket
     """
 
     while True:
-        client_socket, client_address = server_socket.accept()
+        client_socket, client_address = await loop.sock_accept(server_socket)
+        loop.create_task(handle_client(loop, client_socket))
+
         print(f"New connection received from {client_address}")
-        client_socket.settimeout(SOCKET_TIMEOUT)
-        handle_client(client_socket)
 
 
 def main():
     """Open a socket and loop forever while waiting for clients
     """
+
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.bind((IP, PORT))
     server_socket.listen(10)
+    server_socket.setblocking(False)
+
     print("Listening for connections on port %d" % PORT)
 
-    handle_server(server_socket)
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(handle_server(loop, server_socket))
 
 
 if __name__ == "__main__":
