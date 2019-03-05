@@ -94,7 +94,7 @@ class Server:
         """
 
         while True:
-            client_socket, client_address = await self.loop.sock_accept(self.socket)
+            client_socket, (client_address, _) = await self.loop.sock_accept(self.socket)
             self.loop.create_task(self.handle_client(client_socket))
 
             print(f"New connection received from {client_address}")
