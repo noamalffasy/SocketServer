@@ -93,14 +93,16 @@ def generate_response(filename, data_len):
     headers.append(f"Date: {date}")
     headers.append(f"Server: NoamServer/0.0.0")
     headers.append("Content-Encoding: gzip")
+    headers.append(f"Content-Length: {data_len}")
+    if get_file_type(filename).startswith("text"):
+        headers.append(
+            f"Content-Type: {get_file_type(filename)}; charset=utf-8")
+    else:
+        headers.append(f"Content-Type: {get_file_type(filename)}")
     if not status.startswith("404"):
-        headers.append(f"Content-Length: {data_len}")
-        if get_file_type(filename).startswith("text"):
-            headers.append(
-                f"Content-Type: {get_file_type(filename)}; charset=utf-8")
-        else:
-            headers.append(f"Content-Type: {get_file_type(filename)}")
-    headers.append("Connection: keep-alive")
+        headers.append("Connection: keep-alive")
+    else:
+        headers.append("Connection: Closed")
 
     headers.append("\r\n")
 
@@ -118,14 +120,14 @@ async def handle_client_request(loop, resource, client_socket):
     :type client_socket: socket
     """
 
-    filename = ""
+    filename = DEFAULT_URL + "/index.html" if resource == "/" else DEFAULT_URL + resource
+    data = b""
+    gzip_data = b""
 
-    if resource == "/":
-        filename = DEFAULT_URL + "/index.html"
+    if exists(filename):
+        data = get_file_data(filename)
     else:
-        filename = DEFAULT_URL + resource
-
-    data = get_file_data(filename)
+        data = b"Not Found"
     gzip_data = compress_data(data)
 
     http_response = generate_response(filename, len(gzip_data))
