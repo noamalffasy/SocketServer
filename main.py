@@ -207,6 +207,7 @@ def main():
     """
 
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server_socket.bind((IP, PORT))
     server_socket.listen(10)
     server_socket.setblocking(False)
@@ -219,4 +220,7 @@ def main():
 
 if __name__ == "__main__":
     # Call the main handler function
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        pass
