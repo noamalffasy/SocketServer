@@ -4,16 +4,17 @@ Module for HTTP utils
 
 from email.utils import formatdate
 from datetime import datetime
-from os.path import exists
 from time import mktime
 
-from src.utils.files import get_file_type
-
-def generate_response(filename, data_len):
+def generate_response(status, content_type, data_len):
     """Generates the response headers
 
-    :param filename: The file's name and path
-    :type filename: str
+    :param status: The status code to send (e.g. 200 OK)
+    :type status: str
+    :param content_type: The file's content type
+    :type content_type: str
+    :param data_len: The file's length
+    :type data_len: str
     :return: The response headers
     :rtype: bytes
     """
@@ -22,18 +23,16 @@ def generate_response(filename, data_len):
     date = formatdate(timeval=mktime(
         datetime.now().timetuple()), localtime=False, usegmt=True)
 
-    status = "200 OK" if exists(filename) else "404 Not Found"
-
-    headers.append(f"HTTP/1.1 {status}")
+    headers.append(f"HTTP/1.0 {status}")
     headers.append(f"Date: {date}")
     headers.append(f"Server: NoamServer/0.0.0")
     headers.append("Content-Encoding: gzip")
     headers.append(f"Content-Length: {data_len}")
-    if get_file_type(filename).startswith("text"):
+    if content_type.startswith("text"):
         headers.append(
-            f"Content-Type: {get_file_type(filename)}; charset=utf-8")
+            f"Content-Type: {content_type}; charset=utf-8")
     else:
-        headers.append(f"Content-Type: {get_file_type(filename)}")
+        headers.append(f"Content-Type: {content_type}")
     if not status.startswith("404"):
         headers.append("Connection: keep-alive")
     else:
@@ -45,29 +44,17 @@ def generate_response(filename, data_len):
 
 
 def validate_http_request(request):
-    """Check if request is a valid HTTP request and returns TRUE / FALSE and the requested URL
+    """Check if request is a valid HTTP request and returns True or False along with the requested URL
 
     :param request: The HTTP Request
     :type request: bytes
-    :return: valid
-    :rtype: bytes
+    :return: Whether the request is valid or not and the requested path
+    :rtype: tuple
     """
 
-    # GET / HTTP/1.1
-    # Host: 127.0.0.1
-    # User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10.14; rv:65.0) Gecko/20100101 Firefox/65.0
-    # Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8
-    # Accept-Language: en-US,en;q=0.5
-    # Accept-Encoding: gzip, deflate
-    # DNT: 1
-    # Connection: keep-alive
-    # Upgrade-Insecure-Requests: 1
-    #
-    #
-
     headers = [header for header in request.decode().split("\r\n")]
+    basic_info = headers[0].split(" ")
 
-    if len(headers[0].split(" ")) == 3:
-        basic_request_header = headers[0].split(" ")
-        return True, basic_request_header[1]
+    if basic_info[0] == "GET" and basic_info[1].startswith("/") and basic_info[2] == "HTTP/1.1":
+        return True, basic_info[1]
     return False, None
